@@ -62,55 +62,90 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signUp = async (email: string, password: string, displayName: string) => {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-    
-    await updateProfile(user, { displayName });
-    await sendEmailVerification(user);
-    
-    await setDoc(doc(db, 'users', user.uid), {
-      email: user.email,
-      displayName: displayName,
-      emailVerified: false,
-      createdAt: new Date().toISOString(),
-      settings: {
-        theme: 'system',
-        language: 'English',
-        defaultSession: 'London',
-        defaultRiskPercent: 1,
-        defaultSetupGrade: 'B',
-        autoCalculatePnL: true,
-        showPartialCloses: true,
-        shareAnalytics: true,
-        showOnLeaderboard: false
-      }
-    });
-    
-    await signOut(auth);
+    try {
+      // Create user in Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      
+      // Update profile with display name
+      await updateProfile(user, { displayName });
+      
+      // Send verification email
+      await sendEmailVerification(user);
+      
+      // Create user document in Firestore
+      await setDoc(doc(db, 'users', user.uid), {
+        email: user.email,
+        displayName: displayName,
+        emailVerified: false,
+        createdAt: new Date().toISOString(),
+        settings: {
+          theme: 'system',
+          language: 'English',
+          defaultSession: 'London',
+          defaultRiskPercent: 1,
+          defaultSetupGrade: 'B',
+          autoCalculatePnL: true,
+          showPartialCloses: true,
+          shareAnalytics: true,
+          showOnLeaderboard: false
+        }
+      });
+      
+      // Do NOT sign out - keep user authenticated
+      // The user will need to verify email to access full features
+      
+    } catch (error: any) {
+      console.error('Sign up error:', error);
+      throw new Error(error.message || 'Failed to create account');
+    }
   };
 
   const signIn = async (email: string, password: string) => {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-    
-    if (!user.emailVerified) {
-      await signOut(auth);
-      throw new Error('email_not_verified');
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      
+      if (!user.emailVerified) {
+        // User exists but email not verified
+        throw new Error('email_not_verified');
+      }
+      
+    } catch (error: any) {
+      console.error('Sign in error:', error);
+      if (error.message === 'email_not_verified') {
+        throw new Error('Please verify your email before logging in. Check your inbox for the verification link.');
+      }
+      throw new Error(error.message || 'Failed to sign in');
     }
   };
 
   const logout = async () => {
-    await signOut(auth);
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   const sendVerificationEmail = async () => {
     if (user && !user.emailVerified) {
-      await sendEmailVerification(user);
+      try {
+        await sendEmailVerification(user);
+      } catch (error) {
+        console.error('Send verification email error:', error);
+        throw new Error('Failed to send verification email');
+      }
     }
   };
 
   const sendPasswordReset = async (email: string) => {
-    await sendPasswordResetEmail(auth, email);
+    try {
+      await sendPasswordResetEmail(auth, email);
+    } catch (error: any) {
+      console.error('Password reset error:', error);
+      throw new Error(error.message || 'Failed to send password reset email');
+    }
   };
 
   return (
