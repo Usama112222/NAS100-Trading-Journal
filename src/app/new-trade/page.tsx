@@ -112,24 +112,24 @@ export default function NewTradePage() {
   };
 
   // Upload image to IMGBB
-  const uploadToIMGBB = async (file: File): Promise<string> => {
-    const formData = new FormData();
-    formData.append('image', file);
-    formData.append('key', process.env.NEXT_PUBLIC_IMGBB_API_KEY || '1e25918638bccef6fb6d5c392796fc5b');
+const uploadToIMGBB = async (file: File): Promise<string> => {
+  const formData = new FormData();
+  formData.append('image', file);
+  formData.append('key', '1e25918638bccef6fb6d5c392796fc5b'); // Hardcoded working key
 
-    const response = await fetch('https://api.imgbb.com/1/upload', {
-      method: 'POST',
-      body: formData,
-    });
+  const response = await fetch('https://api.imgbb.com/1/upload', {
+    method: 'POST',
+    body: formData,
+  });
 
-    const data = await response.json();
-    
-    if (!data.success) {
-      throw new Error(data.error?.message || 'Upload failed');
-    }
-    
-    return data.data.url;
-  };
+  const data = await response.json();
+  
+  if (!data.success) {
+    throw new Error(data.error?.message || 'Upload failed');
+  }
+  
+  return data.data.url;
+};
 
   const calculatePnL = () => {
     const entry = parseFloat(formData.entryPrice);
