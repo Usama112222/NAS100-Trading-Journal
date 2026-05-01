@@ -33,12 +33,12 @@ interface PnLCalculation {
 
 export default function NewTradePage() {
   const router = useRouter();
-  const { user } = useAuth(); // Get authenticated user from Firebase
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
-  const [screenshotBase64, setScreenshotBase64] = useState<string>('');
+  const [screenshotUrl, setScreenshotUrl] = useState<string>(''); // Store URL instead of base64
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -76,7 +76,6 @@ export default function NewTradePage() {
     notes: '',
   });
 
-  // Fetch accounts when user is authenticated
   useEffect(() => {
     if (user) {
       fetchAccounts();
@@ -110,6 +109,26 @@ export default function NewTradePage() {
     } finally {
       setLoadingAccounts(false);
     }
+  };
+
+  // Upload image to IMGBB
+  const uploadToIMGBB = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('key', process.env.NEXT_PUBLIC_IMGBB_API_KEY || 'f9eb19ff7d33616567b71ee958ee2ff7');
+
+    const response = await fetch('https://api.imgbb.com/1/upload', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.error?.message || 'Upload failed');
+    }
+    
+    return data.data.url;
   };
 
   const calculatePnL = () => {
@@ -290,73 +309,45 @@ export default function NewTradePage() {
     ));
   };
 
-  const compressImage = (base64: string, maxWidth: number = 1024): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      if (typeof window === 'undefined') {
-        resolve(base64);
-        return;
-      }
-      const img = new window.Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-        if (width > maxWidth) {
-          height = (height * maxWidth) / width;
-          width = maxWidth;
-        }
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.7));
-        } else {
-          resolve(base64);
-        }
-      };
-      img.onerror = () => reject(new Error('Failed to load image'));
-      img.src = base64;
-    });
-  };
-
+  // Updated: Upload to IMGBB and store URL
   const handleScreenshotSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
     if (!file.type.startsWith('image/')) {
       setError('Please select an image file');
       return;
     }
+    
     if (file.size > 10 * 1024 * 1024) {
       setError('File too large. Max 10MB');
       return;
     }
+    
     setLoading(true);
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      try {
-        let base64String = reader.result as string;
-        if (base64String.length > 500000 && typeof window !== 'undefined') {
-          base64String = await compressImage(base64String, 1024);
-        }
-        setScreenshotBase64(base64String);
-        setScreenshotPreview(base64String);
-        setError('');
-      } catch (err) {
-        setError('Failed to process image');
-      } finally {
-        setLoading(false);
-      }
-    };
-    reader.onerror = () => {
-      setError('Failed to read file');
+    setError('');
+    
+    try {
+      // Create preview
+      const previewUrl = URL.createObjectURL(file);
+      setScreenshotPreview(previewUrl);
+      
+      // Upload to IMGBB
+      const imageUrl = await uploadToIMGBB(file);
+      setScreenshotUrl(imageUrl);
+      console.log('✅ Image uploaded successfully:', imageUrl);
+      
+    } catch (err: any) {
+      console.error('Upload error:', err);
+      setError(err.message || 'Failed to upload image');
+      setScreenshotPreview(null);
+    } finally {
       setLoading(false);
-    };
-    reader.readAsDataURL(file);
+    }
   };
 
   const removeScreenshot = () => {
-    setScreenshotBase64('');
+    setScreenshotUrl('');
     setScreenshotPreview(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -370,16 +361,13 @@ export default function NewTradePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Check if user is authenticated
     if (!user) {
       setError('❌ Please login first');
       return;
     }
     
-    // Check if account exists
     if (!selectedAccountId || !selectedAccount) {
       setError('❌ No trading account found. Please create an account first.');
-      document.querySelector('.bg-blue-50')?.scrollIntoView({ behavior: 'smooth' });
       return;
     }
     
@@ -429,7 +417,7 @@ export default function NewTradePage() {
       }
       
       const submitData = {
-        userId: user.uid, // Use Firebase Auth UID
+        userId: user.uid,
         accountId: selectedAccount.id,
         accountName: selectedAccount.name,
         date: formData.date,
@@ -455,7 +443,7 @@ export default function NewTradePage() {
         result: formData.result,
         setupGrade: formData.setupGrade,
         notes: formData.notes,
-        screenshotBase64: screenshotBase64,
+        screenshotUrl: screenshotUrl, // Changed from screenshotBase64 to screenshotUrl
         contracts: contracts,
         pnlCalculated: pnlCalculation?.pnlValue || 0,
         weightedAvgExit: formData.partialClosesEnabled ? calculateWeightedAverageExitPrice() : null,

@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
     console.log('=== NEW TRADE REQUEST ===');
     console.log('Direction:', body.direction);
     console.log('Partial Closes Enabled:', body.partialClosesEnabled);
+    console.log('Screenshot URL provided:', !!body.screenshotUrl);
     
     // Validate required fields
     if (!body.date || !body.session || !body.entryPrice || !body.stopLoss) {
@@ -153,38 +154,12 @@ export async function POST(request: NextRequest) {
     const reward = Math.abs(exitPrice - entry);
     const rr = risk > 0 ? (reward / risk).toFixed(2) : '0';
 
-    let screenshotUrl = '';
-    const imgbbApiKey = process.env.IMGBB_API_KEY;
-    
-    // Upload screenshot if provided
-    if (body.screenshotBase64 && body.screenshotBase64.length > 100 && imgbbApiKey) {
-      try {
-        let base64Data = body.screenshotBase64;
-        if (base64Data.includes(',')) {
-          base64Data = base64Data.split(',')[1];
-        }
-        
-        const formData = new FormData();
-        formData.append('key', imgbbApiKey);
-        formData.append('image', base64Data);
-        
-        const response = await fetch('https://api.imgbb.com/1/upload', {
-          method: 'POST',
-          body: formData,
-        });
-        
-        const data = await response.json();
-        if (data.success && data.data && data.data.url) {
-          screenshotUrl = data.data.url;
-        }
-      } catch (uploadError) {
-        console.error('Upload error:', uploadError);
-      }
-    }
+    // Use the screenshot URL directly from frontend (already uploaded to IMGBB)
+    const screenshotUrl = body.screenshotUrl || '';
 
     // Save to Firestore with userId
     const tradeData = {
-      userId: body.userId, // REQUIRED - for data isolation
+      userId: body.userId,
       accountId: body.accountId,
       accountName: body.accountName || '',
       direction: body.direction || 'BUY',
@@ -210,7 +185,7 @@ export async function POST(request: NextRequest) {
       result: body.result || 'Win',
       setupGrade: body.setupGrade || 'B',
       notes: body.notes || '',
-      screenshotUrl: screenshotUrl,
+      screenshotUrl: screenshotUrl,  // Now using the URL from frontend
       contracts: contracts,
       weightedAvgExit: body.partialClosesEnabled ? weightedAvgExit : null,
       pnlCalculated: totalPnL,
@@ -266,7 +241,6 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const userId = searchParams.get('userId');
     
-    // Require userId for security
     if (!userId) {
       return NextResponse.json(
         { success: false, error: 'userId is required' },
@@ -274,7 +248,6 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // Query trades only for this user
     const tradesRef = collection(db, 'trades');
     const q = query(
       tradesRef, 
