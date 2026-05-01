@@ -115,7 +115,7 @@ export default function NewTradePage() {
   const uploadToIMGBB = async (file: File): Promise<string> => {
     const formData = new FormData();
     formData.append('image', file);
-    formData.append('key', process.env.NEXT_PUBLIC_IMGBB_API_KEY || 'f9eb19ff7d33616567b71ee958ee2ff7');
+    formData.append('key', process.env.NEXT_PUBLIC_IMGBB_API_KEY || '1e25918638bccef6fb6d5c392796fc5b');
 
     const response = await fetch('https://api.imgbb.com/1/upload', {
       method: 'POST',
